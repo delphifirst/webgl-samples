@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Tutorial02</title>
+		<script>
+			var gl;
+			var lastUpdateTime;
+
+			function initWebGL()
+			{
+				var canvas = document.getElementById("glcanvas");
+				try
+				{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+				}
+				catch (e)
+				{
+				}
+				if(!gl)
+				{
+					alert("Your browser doesn't appear to support WebGL.");
+					gl = null;
+				}
+			}
+
+			function initShaders()
+			{
+
+			}
+
+			function initProgram()
+			{
+				gl.clearColor(0.098039225, 0.098039225, 0.439215720, 1.000000000);
+				gl.clearDepth(1.0);
+				gl.enable(gl.DEPTH_TEST);
+				gl.depthFunc(gl.LEQUAL);
+				lastUpdateTime = (new Date).getTime();
+			}
+
+			function updateFps(deltaTime)
+			{
+				var labelFps = document.getElementById("labelFps");
+				labelFps.innerHTML = "FPS: " + (1000 / deltaTime).toFixed(1);
+			}
+
+			function render()
+			{
+				var currentTime = (new Date).getTime();
+				var deltaTime = currentTime - lastUpdateTime;
+				lastUpdateTime = currentTime;
+
+				updateFps(deltaTime);
+
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			}
+
+			function start()
+			{
+				initWebGL();
+				if(gl)
+				{
+					initShaders();
+					initProgram();
+					setInterval(render, 1000 / 60);
+				}
+			}
+		</script>
+	</head>
+
+	<body onload="start()">
+	    <canvas id="glcanvas" width="800" height="600">
+			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
+    	</canvas>
+		<p>
+			<ul>
+				<li id="labelFps">FPS: 0</li>
+			</ul>
+		</p>
+    </body>
+</html>
