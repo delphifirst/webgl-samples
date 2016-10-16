@@ -2,8 +2,10 @@
 <html>
 	<head>
 		<title>Tutorial02</title>
+		<script src="./gl-matrix.js"></script>
 		<script>
 			var gl;
+			var rotationUniform;
 			var posAttribute;
 			var verticesBuffer;
 			var lastUpdateTime;
@@ -73,6 +75,8 @@
 				gl.useProgram(shaderProgram);
 				posAttribute = gl.getAttribLocation(shaderProgram, "pos");
 				gl.enableVertexAttribArray(posAttribute);
+
+				rotationUniform = gl.getUniformLocation(shaderProgram, "rotation");
 			}
 
 			function initBuffers()
@@ -113,6 +117,10 @@
 
 				updateFps(deltaTime);
 
+				var rotationMat = mat3.create();
+				mat3.fromRotation(rotationMat, currentTime / 1000);
+				gl.uniformMatrix3fv(rotationUniform, false, rotationMat);
+
 				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
 				gl.vertexAttribPointer(posAttribute, 3, gl.FLOAT, false, 0, 0);
@@ -133,11 +141,12 @@
 		</script>
 
 		<script id="shader-vs" type="x-shader/x-vertex">
+		uniform mat3 rotation;
 		attribute vec3 pos;
 
 		void main()
 		{
-			gl_Position = vec4(pos, 1);
+			gl_Position = vec4(rotation * pos, 1);
 		}
 		</script>
 
