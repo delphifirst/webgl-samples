@@ -5,10 +5,11 @@
 		<script src="./gl-matrix.js"></script>
 		<script>
 			var gl;
-			var rotationUniform;
-			var posAttribute;
+			var uniforms = {};
+			var attributes = {};
 			var verticesBuffer;
-			var lastUpdateTime;
+			var indicesBuffer;
+			var startTime, lastUpdateTime;
 
 			function initWebGL()
 			{
@@ -73,23 +74,44 @@
 					alert("Unable to initialize the shader program.");
 
 				gl.useProgram(shaderProgram);
-				posAttribute = gl.getAttribLocation(shaderProgram, "pos");
-				gl.enableVertexAttribArray(posAttribute);
+				attributes.pos = gl.getAttribLocation(shaderProgram, "pos");
+				attributes.color = gl.getAttribLocation(shaderProgram, "color");
+				gl.enableVertexAttribArray(attributes.pos);
+				gl.enableVertexAttribArray(attributes.color);
 
-				rotationUniform = gl.getUniformLocation(shaderProgram, "rotation");
+				uniforms.modelViewMatrix = gl.getUniformLocation(shaderProgram, "modelViewMatrix");
+				uniforms.projectionMatrix = gl.getUniformLocation(shaderProgram, "projectionMatrix");
 			}
 
 			function initBuffers()
 			{
 				var vertices = [
-					0, 0.5, 0.5,
-					-0.5, -0.5, 0.5,
-					0.5, -0.5, 0.5
+					-1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
+					1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
+					1.0, 1.0, -1.0,		0.0, 1.0, 1.0,
+					-1.0, 1.0, -1.0,	1.0, 0.0, 0.0,
+					-1.0, -1.0, 1.0,	1.0, 0.0, 1.0,
+					1.0, -1.0, 1.0,		1.0, 1.0, 0.0,
+					1.0, -1.0, -1.0,	1.0, 1.0, 1.0,
+					-1.0, -1.0, -1.0,	0.0, 0.0, 0.0,
+				];
+
+				var indices = [
+					3,0,1,		2,3,1,
+        			0,4,5,		1,0,5,
+        			3,7,4,		0,3,4,
+        			1,5,6,		2,1,6,
+        			2,6,7,		3,2,7,
+        			6,5,4,		7,6,4,
 				];
 
 				verticesBuffer = gl.createBuffer();
 				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+				indicesBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Int16Array(indices), gl.STATIC_DRAW);
 			}
 
 			function initProgram()
@@ -98,7 +120,7 @@
 				gl.clearDepth(1.0);
 				gl.enable(gl.DEPTH_TEST);
 				gl.depthFunc(gl.LEQUAL);
-				lastUpdateTime = (new Date).getTime();
+				startTime = lastUpdateTime = (new Date).getTime();
 			}
 
 			function updateFps(deltaTime)
@@ -117,14 +139,34 @@
 
 				updateFps(deltaTime);
 
-				var rotationMat = mat3.create();
-				mat3.fromRotation(rotationMat, currentTime / 1000);
-				gl.uniformMatrix3fv(rotationUniform, false, rotationMat);
+				var t = (currentTime - startTime) / 1000;
+
+				var modelMatrix = mat4.create();
+				mat4.fromYRotation(modelMatrix, -t);
+
+				var viewMatrix = mat4.create();
+				var eyePos = vec3.create();
+				vec3.set(eyePos, 0, 1, 5);
+				var centerPos = vec3.create();
+				vec3.set(centerPos, 0, 1, 0);
+				var upDirection = vec3.create();
+				vec3.set(upDirection, 0, 1, 0);
+				mat4.lookAt(viewMatrix, eyePos, centerPos, upDirection);
+
+				var modelViewMatrix = mat4.create();
+				mat4.mul(modelViewMatrix, viewMatrix, modelMatrix);
+				gl.uniformMatrix4fv(uniforms.modelViewMatrix, false, modelViewMatrix);
+
+				var projectionMatrix = mat4.create();
+				mat4.perspective(projectionMatrix, Math.Pi / 2, 800 / 600, 0.01, 100);
+				gl.uniformMatrix4fv(uniforms.projectionMatrix, false, projectionMatrix);
 
 				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
-				gl.vertexAttribPointer(posAttribute, 3, gl.FLOAT, false, 0, 0);
-				gl.drawArrays(gl.TRIANGLES, 0, 3);
+				gl.vertexAttribPointer(attributes.pos, 3, gl.FLOAT, false, 24, 0);
+				gl.vertexAttribPointer(attributes.color, 3, gl.FLOAT, false, 24, 12);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+				gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 			}
 
 			function start()
@@ -141,21 +183,29 @@
 		</script>
 
 		<script id="shader-vs" type="x-shader/x-vertex">
-		uniform mat3 rotation;
+		uniform mat4 modelViewMatrix;
+		uniform mat4 projectionMatrix;
+
 		attribute vec3 pos;
+		attribute vec3 color;
+
+		varying vec3 fragColor;
 
 		void main()
 		{
-			gl_Position = vec4(rotation * pos, 1);
+			gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1);
+			fragColor = color;
 		}
 		</script>
 
 		<script id="shader-fs" type="x-shader/x-fragment">
 		precision mediump float;
 
+		varying vec3 fragColor;
+
 		void main()
 		{
-			gl_FragColor = vec4(1, 1, 0, 1);
+			gl_FragColor = vec4(fragColor, 1);
 		}
 		</script>
 	</head>
