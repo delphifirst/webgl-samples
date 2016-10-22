@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Tutorial07</title>
+		<script src="./gl-matrix.js"></script>
+		<script src="./main.js"></script>
+		<script id="shader-vs" type="x-shader/x-vertex">
+		uniform mat4 modelMatrix;
+		uniform mat4 viewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 pos;
+		attribute vec2 texcoord;
+
+		varying vec2 fsTexcoord;
+
+		void main()
+		{
+			gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1);
+			fsTexcoord = texcoord;
+		}
+		</script>
+
+		<script id="shader-fs" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform vec3 meshColor;
+		uniform sampler2D sampler;
+
+		varying vec2 fsTexcoord;
+
+		void main()
+		{
+			gl_FragColor = texture2D(sampler, fsTexcoord) * vec4(meshColor, 1);
+		}
+		</script>
+	</head>
+
+	<body onload="start()">
+	    <canvas id="glcanvas" width="800" height="600">
+			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
+    	</canvas>
+		<ul>
+			<li id="labelFps">FPS: 0</li>
+			<li>Texture</li>
+			<img id="texture" src="seafloor.png" />
+		</ul>
+    </body>
+</html>
