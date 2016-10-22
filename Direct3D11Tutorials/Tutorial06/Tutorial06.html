@@ -1,0 +1,328 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Tutorial06</title>
+		<script src="./gl-matrix.js"></script>
+		<script>
+			var gl;
+			var programs = {};
+			var verticesBuffer;
+			var indicesBuffer;
+			var startTime, lastUpdateTime;
+
+			function initWebGL()
+			{
+				var canvas = document.getElementById("glcanvas");
+				try
+				{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+				}
+				catch (e)
+				{
+				}
+				if(!gl)
+				{
+					alert("Your browser doesn't appear to support WebGL.");
+					gl = null;
+				}
+			}
+
+			function getShader(id)
+			{
+				shaderScript = document.getElementById(id);
+				if(!shaderScript)
+					return null;
+				shaderSource = "";
+				currentChild = shaderScript.firstChild;
+				while(currentChild)
+				{
+					if(currentChild.nodeType == currentChild.TEXT_NODE)
+						shaderSource += currentChild.textContent;
+					currentChild = currentChild.nextSibling;
+				}
+
+				var shader = null;
+				if(shaderScript.type == "x-shader/x-vertex")
+					shader = gl.createShader(gl.VERTEX_SHADER);
+				else if(shaderScript.type == "x-shader/x-fragment")
+					shader = gl.createShader(gl.FRAGMENT_SHADER);
+				else
+					return null;
+
+				gl.shaderSource(shader, shaderSource);
+				gl.compileShader(shader);
+				if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+				{
+					alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+					return null;
+				}
+				return shader;
+			}
+
+			function initShaders()
+			{
+				var vertexShader = getShader("shader-vs");
+				var lightFragmentShader = getShader("shader-fs-light");
+				var solidFragmentShader = getShader("shader-fs-solid");
+
+				programs.light = gl.createProgram();
+				gl.attachShader(programs.light, vertexShader);
+				gl.attachShader(programs.light, lightFragmentShader);
+				gl.linkProgram(programs.light);
+
+				programs.solid = gl.createProgram();
+				gl.attachShader(programs.solid, vertexShader);
+				gl.attachShader(programs.solid, solidFragmentShader);
+				gl.linkProgram(programs.solid);
+
+				if(!gl.getProgramParameter(programs.light, gl.LINK_STATUS)
+						|| !gl.getProgramParameter(programs.solid, gl.LINK_STATUS))
+					alert("Unable to initialize the shader program.");
+
+				programs.lightAttributes = {};
+				programs.lightAttributes.pos = gl.getAttribLocation(programs.light, "pos");
+				programs.lightAttributes.normal = gl.getAttribLocation(programs.light, "normal");
+				gl.enableVertexAttribArray(programs.lightAttributes.pos);
+				gl.enableVertexAttribArray(programs.lightAttributes.normal);
+
+				programs.solidAttributes = {};
+				programs.solidAttributes.pos = gl.getAttribLocation(programs.solid, "pos");
+				programs.solidAttributes.normal = gl.getAttribLocation(programs.solid, "normal");
+				gl.enableVertexAttribArray(programs.solidAttributes.pos);
+				gl.enableVertexAttribArray(programs.solidAttributes.normal);
+
+				programs.lightUniforms = {};
+				programs.lightUniforms.modelMatrix = gl.getUniformLocation(programs.light, "modelMatrix");
+				programs.lightUniforms.viewMatrix = gl.getUniformLocation(programs.light, "viewMatrix");
+				programs.lightUniforms.projectionMatrix = gl.getUniformLocation(programs.light, "projectionMatrix");
+				programs.lightUniforms.lightDir = gl.getUniformLocation(programs.light, "lightDir");
+				programs.lightUniforms.lightColor = gl.getUniformLocation(programs.light, "lightColor");
+
+				programs.solidUniforms = {};
+				programs.solidUniforms.modelMatrix = gl.getUniformLocation(programs.solid, "modelMatrix");
+				programs.solidUniforms.viewMatrix = gl.getUniformLocation(programs.solid, "viewMatrix");
+				programs.solidUniforms.projectionMatrix = gl.getUniformLocation(programs.solid, "projectionMatrix");
+				programs.solidUniforms.outputColor = gl.getUniformLocation(programs.solid, "outputColor");
+			}
+
+			function initBuffers()
+			{
+				var vertices = [
+					-1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
+					1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
+					1.0, 1.0, -1.0,		0.0, 1.0, 0.0,
+					-1.0, 1.0, -1.0,	0.0, 1.0, 0.0,
+
+					-1.0, -1.0, 1.0,	0.0, -1.0, 0.0,
+					1.0, -1.0, 1.0,		0.0, -1.0, 0.0,
+					1.0, -1.0, -1.0,	0.0, -1.0, 0.0,
+					-1.0, -1.0, -1.0,	0.0, -1.0, 0.0,
+
+					-1.0, -1.0, -1.0,	-1.0, 0.0, 0.0,
+					-1.0, -1.0, 1.0,	-1.0, 0.0, 0.0,
+					-1.0, 1.0, 1.0,		-1.0, 0.0, 0.0,
+					-1.0, 1.0, -1.0,	-1.0, 0.0, 0.0,
+
+					1.0, -1.0, -1.0,	1.0, 0.0, 0.0,
+					1.0, -1.0, 1.0,		1.0, 0.0, 0.0,
+					1.0, 1.0, 1.0,		1.0, 0.0, 0.0,
+					1.0, 1.0, -1.0,		1.0, 0.0, 0.0,
+
+					-1.0, -1.0, 1.0,	0.0, 0.0, 1.0,
+					1.0, -1.0, 1.0,		0.0, 0.0, 1.0,
+					1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
+					-1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
+
+					-1.0, -1.0, -1.0,	0.0, 0.0, -1.0,
+					1.0, -1.0, -1.0,	0.0, 0.0, -1.0,
+					1.0, 1.0, -1.0,		0.0, 0.0, -1.0,
+					-1.0, 1.0, -1.0,	0.0, 0.0, -1.0,
+				];
+
+				var indices = [
+					3,0,1,		2,3,1,
+
+        			6,5,4,		7,6,4,
+
+        			11,8,9,		10,11,9,
+
+			        14,13,12,	15,14,12,
+
+        			19,16,17,	18,19,17,
+
+        			22,21,20,	23,22,20
+				];
+
+				verticesBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+				indicesBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+			}
+
+			function initProgram()
+			{
+				gl.clearColor(0.098039225, 0.098039225, 0.439215720, 1.000000000);
+				gl.clearDepth(1.0);
+				gl.enable(gl.DEPTH_TEST);
+				gl.depthFunc(gl.LEQUAL);
+				startTime = lastUpdateTime = (new Date).getTime();
+			}
+
+			function updateFps(deltaTime)
+			{
+				var labelFps = document.getElementById("labelFps");
+				labelFps.innerHTML = "FPS: " + (1000 / deltaTime).toFixed(1);
+			}
+
+			function render()
+			{
+				var currentTime = (new Date).getTime();
+				var deltaTime = currentTime - lastUpdateTime;
+				if(deltaTime == 0)
+					deltaTime = 1
+				lastUpdateTime = currentTime;
+
+				updateFps(deltaTime);
+
+				var t = (currentTime - startTime) / 1000;
+
+				var lightRotation = mat4.create();
+				mat4.fromYRotation(lightRotation, 2 * t);
+
+				lightDir = [];
+				lightDir[0] = vec4.create();
+				vec4.set(lightDir[0], -0.577, 0.577, 0.577, 0);
+				lightDir[1] = vec4.create();
+				vec4.set(lightDir[1], 0, 0, 1, 0)
+				vec4.transformMat4(lightDir[1], lightDir[1], lightRotation);
+				lightDirs = [lightDir[0][0], lightDir[0][1], lightDir[0][2], lightDir[1][0], lightDir[1][1], lightDir[1][2]];
+
+				lightColor = [];
+				lightColor[0] = [0.5, 0.5, 0.5];
+				lightColor[1] = [0.5, 0, 0];
+				lightColors = lightColor[0].concat(lightColor[1]);
+
+				var modelMatrixCube = mat4.create();
+				mat4.fromYRotation(modelMatrixCube, -t);
+
+				var viewMatrix = mat4.create();
+				var eyePos = vec3.create();
+				vec3.set(eyePos, 0, 4, 10);
+				var centerPos = vec3.create();
+				vec3.set(centerPos, 0, 1, 0);
+				var upDirection = vec3.create();
+				vec3.set(upDirection, 0, 1, 0);
+				mat4.lookAt(viewMatrix, eyePos, centerPos, upDirection);
+
+				var projectionMatrix = mat4.create();
+				mat4.perspective(projectionMatrix, Math.PI / 4, 800 / 600, 0.01, 100);
+
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+				gl.vertexAttribPointer(programs.lightAttributes.pos, 3, gl.FLOAT, false, 24, 0);
+				gl.vertexAttribPointer(programs.lightAttributes.normal, 3, gl.FLOAT, false, 24, 12);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+
+				// Render cube
+				gl.useProgram(programs.light);
+				gl.uniformMatrix4fv(programs.lightUniforms.modelMatrix, false, modelMatrixCube);
+				gl.uniformMatrix4fv(programs.lightUniforms.viewMatrix, false, viewMatrix);
+				gl.uniformMatrix4fv(programs.lightUniforms.projectionMatrix, false, projectionMatrix);
+				gl.uniform3fv(programs.lightUniforms.lightDir, lightDirs);
+				gl.uniform3fv(programs.lightUniforms.lightColor, lightColors);
+
+				gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
+				gl.useProgram(programs.solid);
+				gl.uniformMatrix4fv(programs.solidUniforms.viewMatrix, false, viewMatrix);
+				gl.uniformMatrix4fv(programs.solidUniforms.projectionMatrix, false, projectionMatrix);
+				var modelMatrixLightScale = mat4.create();
+				mat4.fromScaling(modelMatrixLightScale, [0.2, 0.2, 0.2]);
+
+				for(var i = 0; i < 2; ++i)
+				{
+					var modelMatrixLight = mat4.create();
+					mat4.fromTranslation(modelMatrixLight, vec3.scale(vec3.create(), lightDir[i], 5));
+					mat4.mul(modelMatrixLight, modelMatrixLight, modelMatrixLightScale);
+					gl.uniformMatrix4fv(programs.solidUniforms.modelMatrix, false, modelMatrixLight);
+					gl.uniform3fv(programs.solidUniforms.outputColor, lightColor[i]);
+					gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+				}
+			}
+
+			function start()
+			{
+				initWebGL();
+				if(gl)
+				{
+					initShaders();
+					initBuffers();
+					initProgram();
+					setInterval(render, 1000 / 60);
+				}
+			}
+		</script>
+
+		<script id="shader-vs" type="x-shader/x-vertex">
+		uniform mat4 modelMatrix;
+		uniform mat4 viewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 pos;
+		attribute vec3 normal;
+
+		varying vec3 fsNormal;
+
+		void main()
+		{
+			gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1);
+			fsNormal = (modelMatrix * vec4(normal, 0)).xyz;
+		}
+		</script>
+
+		<script id="shader-fs-light" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform vec3 lightDir[2];
+		uniform vec3 lightColor[2];
+
+		varying vec3 fsNormal;
+
+		void main()
+		{
+			vec3 finalColor = vec3(0, 0, 0);
+			for(int i = 0; i < 2; ++i)
+			{
+				finalColor += clamp(dot(lightDir[i], fsNormal) * lightColor[i], 0.0, 1.0);
+			}
+			gl_FragColor = vec4(finalColor, 1);
+		}
+		</script>
+
+		<script id="shader-fs-solid" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform vec3 outputColor;
+
+		void main()
+		{
+			gl_FragColor = vec4(outputColor, 1);
+		}
+		</script>
+	</head>
+
+	<body onload="start()">
+	    <canvas id="glcanvas" width="800" height="600">
+			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
+    	</canvas>
+		<p>
+			<ul>
+				<li id="labelFps">FPS: 0</li>
+			</ul>
+		</p>
+    </body>
+</html>
