@@ -1,0 +1,249 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Tutorial05</title>
+		<script src="./gl-matrix.js"></script>
+		<script>
+			var gl;
+			var uniforms = {};
+			var attributes = {};
+			var verticesBuffer;
+			var indicesBuffer;
+			var startTime, lastUpdateTime;
+
+			function initWebGL()
+			{
+				var canvas = document.getElementById("glcanvas");
+				try
+				{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+				}
+				catch (e)
+				{
+				}
+				if(!gl)
+				{
+					alert("Your browser doesn't appear to support WebGL.");
+					gl = null;
+				}
+			}
+
+			function getShader(id)
+			{
+				shaderScript = document.getElementById(id);
+				if(!shaderScript)
+					return null;
+				shaderSource = "";
+				currentChild = shaderScript.firstChild;
+				while(currentChild)
+				{
+					if(currentChild.nodeType == currentChild.TEXT_NODE)
+						shaderSource += currentChild.textContent;
+					currentChild = currentChild.nextSibling;
+				}
+
+				var shader = null;
+				if(shaderScript.type == "x-shader/x-vertex")
+					shader = gl.createShader(gl.VERTEX_SHADER);
+				else if(shaderScript.type == "x-shader/x-fragment")
+					shader = gl.createShader(gl.FRAGMENT_SHADER);
+				else
+					return null;
+
+				gl.shaderSource(shader, shaderSource);
+				gl.compileShader(shader);
+				if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+				{
+					alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+					return null;
+				}
+				return shader;
+			}
+
+			function initShaders()
+			{
+				var vertexShader = getShader("shader-vs");
+				var fragmentShader = getShader("shader-fs");
+
+				var shaderProgram = gl.createProgram();
+				gl.attachShader(shaderProgram, vertexShader);
+				gl.attachShader(shaderProgram, fragmentShader);
+				gl.linkProgram(shaderProgram);
+
+				if(!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+					alert("Unable to initialize the shader program.");
+
+				gl.useProgram(shaderProgram);
+				attributes.pos = gl.getAttribLocation(shaderProgram, "pos");
+				attributes.color = gl.getAttribLocation(shaderProgram, "color");
+				gl.enableVertexAttribArray(attributes.pos);
+				gl.enableVertexAttribArray(attributes.color);
+
+				uniforms.modelViewMatrix = gl.getUniformLocation(shaderProgram, "modelViewMatrix");
+				uniforms.projectionMatrix = gl.getUniformLocation(shaderProgram, "projectionMatrix");
+			}
+
+			function initBuffers()
+			{
+				var vertices = [
+					-1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
+					1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
+					1.0, 1.0, -1.0,		0.0, 1.0, 1.0,
+					-1.0, 1.0, -1.0,	1.0, 0.0, 0.0,
+					-1.0, -1.0, 1.0,	1.0, 0.0, 1.0,
+					1.0, -1.0, 1.0,		1.0, 1.0, 0.0,
+					1.0, -1.0, -1.0,	1.0, 1.0, 1.0,
+					-1.0, -1.0, -1.0,	0.0, 0.0, 0.0,
+				];
+
+				var indices = [
+					3,0,1,		2,3,1,
+        			0,4,5,		1,0,5,
+        			3,7,4,		0,3,4,
+        			1,5,6,		2,1,6,
+        			2,6,7,		3,2,7,
+        			6,5,4,		7,6,4,
+				];
+
+				verticesBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+				indicesBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+			}
+
+			function initProgram()
+			{
+				gl.clearColor(0.098039225, 0.098039225, 0.439215720, 1.000000000);
+				gl.clearDepth(1.0);
+				gl.enable(gl.DEPTH_TEST);
+				gl.depthFunc(gl.LEQUAL);
+				startTime = lastUpdateTime = (new Date).getTime();
+			}
+
+			function updateFps(deltaTime)
+			{
+				var labelFps = document.getElementById("labelFps");
+				labelFps.innerHTML = "FPS: " + (1000 / deltaTime).toFixed(1);
+			}
+
+			function render()
+			{
+				var currentTime = (new Date).getTime();
+				var deltaTime = currentTime - lastUpdateTime;
+				if(deltaTime == 0)
+					deltaTime = 1
+				lastUpdateTime = currentTime;
+
+				updateFps(deltaTime);
+
+				var t = (currentTime - startTime) / 1000;
+
+				// Prepare model matrix for cube 1
+				var modelMatrix1 = mat4.create();
+				mat4.fromYRotation(modelMatrix1, -t);
+
+				// Prepare model matrix for cube 2
+				var modelMatrix2Spin = mat4.create();
+				mat4.fromZRotation(modelMatrix2Spin, -t);
+				var modelMatrix2Orbit = mat4.create();
+				mat4.fromYRotation(modelMatrix2Orbit, t * 2);
+				var translateVector = vec3.create();
+				vec3.set(translateVector, -4, 0, 0);
+				var modelMatrix2Translate = mat4.create();
+				mat4.fromTranslation(modelMatrix2Translate, translateVector);
+				var scaleVector = vec3.create();
+				vec3.set(scaleVector, 0.3, 0.3, 0.3);
+				var modelMatrix2Scale = mat4.create();
+				mat4.fromScaling(modelMatrix2Scale, scaleVector);
+				var modelMatrix2 = modelMatrix2Orbit;
+				mat4.mul(modelMatrix2, modelMatrix2, modelMatrix2Translate);
+				mat4.mul(modelMatrix2, modelMatrix2, modelMatrix2Spin);
+				mat4.mul(modelMatrix2, modelMatrix2, modelMatrix2Scale);
+
+				var viewMatrix = mat4.create();
+				var eyePos = vec3.create();
+				vec3.set(eyePos, 0, 1, 5);
+				var centerPos = vec3.create();
+				vec3.set(centerPos, 0, 1, 0);
+				var upDirection = vec3.create();
+				vec3.set(upDirection, 0, 1, 0);
+				mat4.lookAt(viewMatrix, eyePos, centerPos, upDirection);
+
+				var modelViewMatrix = mat4.create();
+
+				var projectionMatrix = mat4.create();
+				mat4.perspective(projectionMatrix, Math.PI / 2, 800 / 600, 0.01, 100);
+				gl.uniformMatrix4fv(uniforms.projectionMatrix, false, projectionMatrix);
+
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+				gl.vertexAttribPointer(attributes.pos, 3, gl.FLOAT, false, 24, 0);
+				gl.vertexAttribPointer(attributes.color, 3, gl.FLOAT, false, 24, 12);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+
+				// Draw cube 1
+				mat4.mul(modelViewMatrix, viewMatrix, modelMatrix1);
+				gl.uniformMatrix4fv(uniforms.modelViewMatrix, false, modelViewMatrix);
+				gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
+				// Draw cube 2
+				mat4.mul(modelViewMatrix, viewMatrix, modelMatrix2);
+				gl.uniformMatrix4fv(uniforms.modelViewMatrix, false, modelViewMatrix);
+				gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+			}
+
+			function start()
+			{
+				initWebGL();
+				if(gl)
+				{
+					initShaders();
+					initBuffers();
+					initProgram();
+					setInterval(render, 1000 / 60);
+				}
+			}
+		</script>
+
+		<script id="shader-vs" type="x-shader/x-vertex">
+		uniform mat4 modelViewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 pos;
+		attribute vec3 color;
+
+		varying vec3 fragColor;
+
+		void main()
+		{
+			gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1);
+			fragColor = color;
+		}
+		</script>
+
+		<script id="shader-fs" type="x-shader/x-fragment">
+		precision mediump float;
+
+		varying vec3 fragColor;
+
+		void main()
+		{
+			gl_FragColor = vec4(fragColor, 1);
+		}
+		</script>
+	</head>
+
+	<body onload="start()">
+	    <canvas id="glcanvas" width="800" height="600">
+			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
+    	</canvas>
+		<p>
+			<ul>
+				<li id="labelFps">FPS: 0</li>
+			</ul>
+		</p>
+    </body>
+</html>
