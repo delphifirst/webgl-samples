@@ -166,7 +166,7 @@ function render()
     var currentTime = (new Date).getTime();
     var deltaTime = currentTime - lastUpdateTime;
     if(deltaTime == 0)
-        deltaTime = 1
+        deltaTime = 1;
     lastUpdateTime = currentTime;
 
     updateFps(deltaTime);
