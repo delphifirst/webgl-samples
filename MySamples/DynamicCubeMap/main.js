@@ -1,10 +1,21 @@
 var gl;
-var shaderInfos = {};
-var verticesBuffer;
-var indicesBuffer;
-var framebuffer;
-var cubeTexture;
+var shaderInfos = {};	// store informations of each shader (shader program, uniforms, attributes...)
+var verticesBuffer;	// vertex buffer of cube
+var indicesBuffer;	// index buffer of cube
+var framebuffer;	// framebuffer used for offscreen rendering of the dynamic cubemap
+var cubeTexture;	// the dynamic cubemap
+var mouseDrag;		// used to process mouse drag event
 var startTime, lastUpdateTime;
+
+var OFFSCREEN_FRAMEBUFFER_SIZE;		// resolution of cubemap faces
+var SATELLITE_CUBES_COLOR;
+var SATELLITE_CUBES_POSITION;
+
+var CUBE_DIRECTIONS;	// FORWARD direction of each cubemap face
+var CUBE_DIRECTIONS_UP;	// UP direction of each cubemap face
+var CUBE_TEXTURES_FACE;	// webgl representation of each cubemap face
+
+var CANVAS_WIDTH, CANVAS_HEIGHT;
 
 function initWebGL()
 {
@@ -21,6 +32,25 @@ function initWebGL()
         alert("Your browser doesn't appear to support WebGL.");
         gl = null;
     }
+}
+
+function initConsts()
+{
+	OFFSCREEN_FRAMEBUFFER_SIZE = 1024;
+	SATELLITE_CUBES_COLOR = [
+		[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1]
+	];
+	SATELLITE_CUBES_POSITION = [
+		[3, 0, 0], [-4, 0, 0], [0, 4, 0], [0, -5, 0], [0, 0, 4], [0, 0, -4]
+	];
+	CUBE_DIRECTIONS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+	CUBE_DIRECTIONS_UP = [[0, 1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [0, 1, 0], [0, 1, 0]];
+	CUBE_TEXTURES_FACE = [gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z];
+	var canvas = document.getElementById("glcanvas");
+	CANVAS_WIDTH = canvas.width;
+	CANVAS_HEIGHT = canvas.height;
 }
 
 function getShader(id)
@@ -106,72 +136,32 @@ function initShaders()
 
 function initResources()
 {
-	var vertices = [
-		-1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
-		1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
-		1.0, 1.0, -1.0,		0.0, 1.0, 0.0,
-		-1.0, 1.0, -1.0,	0.0, 1.0, 0.0,
-
-		-1.0, -1.0, 1.0,	0.0, -1.0, 0.0,
-		1.0, -1.0, 1.0,		0.0, -1.0, 0.0,
-		1.0, -1.0, -1.0,	0.0, -1.0, 0.0,
-		-1.0, -1.0, -1.0,	0.0, -1.0, 0.0,
-
-		-1.0, -1.0, -1.0,	-1.0, 0.0, 0.0,
-		-1.0, -1.0, 1.0,	-1.0, 0.0, 0.0,
-		-1.0, 1.0, 1.0,		-1.0, 0.0, 0.0,
-		-1.0, 1.0, -1.0,	-1.0, 0.0, 0.0,
-
-		1.0, -1.0, -1.0,	1.0, 0.0, 0.0,
-		1.0, -1.0, 1.0,		1.0, 0.0, 0.0,
-		1.0, 1.0, 1.0,		1.0, 0.0, 0.0,
-		1.0, 1.0, -1.0,		1.0, 0.0, 0.0,
-
-		-1.0, -1.0, 1.0,	0.0, 0.0, 1.0,
-		1.0, -1.0, 1.0,		0.0, 0.0, 1.0,
-		1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
-		-1.0, 1.0, 1.0,		0.0, 0.0, 1.0,
-
-		-1.0, -1.0, -1.0,	0.0, 0.0, -1.0,
-		1.0, -1.0, -1.0,	0.0, 0.0, -1.0,
-		1.0, 1.0, -1.0,		0.0, 0.0, -1.0,
-		-1.0, 1.0, -1.0,	0.0, 0.0, -1.0,
-	];
-
-    var indices = [
-        3,0,1,		2,3,1,
-
-        6,5,4,		7,6,4,
-
-        11,8,9,		10,11,9,
-
-        14,13,12,	15,14,12,
-
-        19,16,17,	18,19,17,
-
-        22,21,20,	23,22,20
-    ];
-
     verticesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ModelCube.vertices), gl.STATIC_DRAW);
 
     indicesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ModelCube.indices), gl.STATIC_DRAW);
 
-	var texture = gl.createTexture();
-	gl.bindTexture(gl.TEXTURE_2D, texture);
-	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 512, 512, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 	var renderbuffer = gl.createRenderbuffer();
 	gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
-	gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 512, 512);
+	gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, OFFSCREEN_FRAMEBUFFER_SIZE, OFFSCREEN_FRAMEBUFFER_SIZE);
 	framebuffer = gl.createFramebuffer();
 	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-	gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
 	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
 
+	// allocate space for the dynamic cubemap
 	cubeTexture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
+	for(var i = 0; i < 6; ++i)
+	{
+		gl.texImage2D(CUBE_TEXTURES_FACE[i], 0, gl.RGBA,
+			OFFSCREEN_FRAMEBUFFER_SIZE, OFFSCREEN_FRAMEBUFFER_SIZE,
+			0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	}
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 }
 
 function initProgram()
@@ -182,6 +172,7 @@ function initProgram()
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     startTime = lastUpdateTime = (new Date).getTime();
+	mouseDrag = new MouseDrag(document.getElementById("glcanvas"), 6);
 }
 
 function updateFps(deltaTime)
@@ -190,20 +181,15 @@ function updateFps(deltaTime)
     labelFps.innerHTML = "FPS: " + (1000 / deltaTime).toFixed(1);
 }
 
-function drawSatelliteCube(t, viewMatrix, projectionMatrix)
+function drawSatelliteCube(t, viewMatrix, projectionMatrix, meshColor, translation)
 {
-	var meshColor = [1, 0.1, 0.1];
-
 	var rotationMatrix = mat4.create();
-    mat4.fromYRotation(rotationMatrix, t * 3);
-	var orbitMatrix = mat4.create();
-	mat4.fromYRotation(orbitMatrix, t);
+    mat4.fromXRotation(rotationMatrix, t * 3);
 	var scaleMatrix = mat4.create();
-	mat4.fromScaling(scaleMatrix, [2, 2, 2]);
+	mat4.fromScaling(scaleMatrix, [0.2, 0.2, 0.2]);
 	var translateMatrix = mat4.create();
-	mat4.fromTranslation(translateMatrix, [30, 0, 0]);
-	var modelMatrix = orbitMatrix;
-	mat4.mul(modelMatrix, modelMatrix, translateMatrix);
+	mat4.fromTranslation(translateMatrix, translation);
+	var modelMatrix = translateMatrix;
 	mat4.mul(modelMatrix, modelMatrix, rotationMatrix);
 	mat4.mul(modelMatrix, modelMatrix, scaleMatrix);
 
@@ -226,7 +212,6 @@ function drawMainCube(t, viewMatrix, projectionMatrix)
 	var meshColor = [0.5, 0.5, 0.5];
 
 	var modelMatrix = mat4.create();
-    mat4.fromYRotation(modelMatrix, t * 0);
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
     gl.vertexAttribPointer(shaderInfos.cubemap.attributes.pos, 3, gl.FLOAT, false, 24, 0);
@@ -257,30 +242,26 @@ function render()
 	gl.useProgram(shaderInfos.color.program);
 
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
-	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 
-	var cubeDirections = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-	var cubeDirectionsUp = [[0, 1, 0], [0, 1, 0], [1, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 0]];
-	var cubeTexturesFace = [gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
-		gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
-		gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,];
 	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-	gl.viewport(0, 0, 512, 512);
+	gl.viewport(0, 0, OFFSCREEN_FRAMEBUFFER_SIZE, OFFSCREEN_FRAMEBUFFER_SIZE);
 	for(var i = 0; i < 6; ++i)
 	{
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, CUBE_TEXTURES_FACE[i], cubeTexture, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		var viewMatrix = mat4.create();
-	    mat4.lookAt(viewMatrix, [0, 0, 0], cubeDirections[i], cubeDirectionsUp[i]);
+	    mat4.lookAt(viewMatrix, [0, 0, 0], CUBE_DIRECTIONS[i], CUBE_DIRECTIONS_UP[i]);
+		var reflectMatrix = mat4.create();
+		mat4.fromScaling(reflectMatrix, [-1, -1, 1]);
+		mat4.mul(viewMatrix, reflectMatrix, viewMatrix);
 	    var projectionMatrix = mat4.create();
 	    mat4.perspective(projectionMatrix, Math.PI / 2, 1, 0.01, 100);
 
-		drawSatelliteCube(t, viewMatrix, projectionMatrix);
-
-		gl.copyTexImage2D(cubeTexturesFace[i], 0, gl.RGBA, 0, 0, 512, 512, 0);
+		for(var j = 0; j < 6; ++j)
+			drawSatelliteCube(t, viewMatrix, projectionMatrix, SATELLITE_CUBES_COLOR[j], SATELLITE_CUBES_POSITION[j]);
 	}
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	gl.viewport(0, 0, 800, 600);
+	gl.viewport(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	gl.useProgram(shaderInfos.cubemap.program);
@@ -288,29 +269,25 @@ function render()
 	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
 	gl.uniform1i(shaderInfos.cubemap.uniforms.sampler, 0);
 
-	var viewMatrix = mat4.create();
-    var eyePos = vec3.create();
-    vec3.set(eyePos, 0, 0, 6);
-    var centerPos = vec3.create();
-    vec3.set(centerPos, 0, 0, 0);
-    var upDirection = vec3.create();
-    vec3.set(upDirection, 0, 1, 0);
-    mat4.lookAt(viewMatrix, eyePos, centerPos, upDirection);
+	var viewMatrix = mouseDrag.getViewMatrix();
+	var eyePos = mouseDrag.getEyePos();
 
 	gl.uniform3fv(shaderInfos.cubemap.uniforms.eyePos, eyePos);
 
     var projectionMatrix = mat4.create();
-    mat4.perspective(projectionMatrix, Math.PI / 4, 800 / 600, 0.01, 100);
+    mat4.perspective(projectionMatrix, Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.01, 100);
 
     drawMainCube(t, viewMatrix, projectionMatrix);
 
 	gl.useProgram(shaderInfos.color.program);
-	drawSatelliteCube(t, viewMatrix, projectionMatrix);
+	for(var j = 0; j < 6; ++j)
+		drawSatelliteCube(t, viewMatrix, projectionMatrix, SATELLITE_CUBES_COLOR[j], SATELLITE_CUBES_POSITION[j]);
 }
 
 function start()
 {
     initWebGL();
+	initConsts();
     if(gl)
     {
         initShaders();
