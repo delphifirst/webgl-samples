@@ -1,57 +1,72 @@
 function MouseDrag(canvas, distance)
 {
-	canvas.addEventListener("mousedown", onMouseDown);
+	this.preX = 0;
+	this.preY = 0;
+	this.alpha = -Math.PI / 2;
+	this.beta = 0;
 
-	var preX, preY;
-	var alpha = -Math.PI / 2, beta = 0;
-	var baseAlpha, baseBeta;
-	var betaLimit = Math.PI / 180 * 85;
+	this.baseAlpha = 0;
+	this.baseBeta = 0;
+	this.mousemoveCallback = function(){};
+	this.mouseupCallback = function(){};
 
-	this.getViewMatrix = function()
-	{
-		var viewMatrix = mat4.create();
-		var eyePos = this.getEyePos();
-	    mat4.lookAt(viewMatrix, eyePos, [0, 0, 0], [0, 1, 0]);
-		return viewMatrix
-	}
+	this.distance = distance;
+	this.canvas = canvas;
 
-	this.getEyePos = function()
-	{
-		var result = vec3.create();
-		var horizontalDistance = Math.cos(beta) * distance;
-		var eyePosX = Math.cos(alpha) * horizontalDistance;
-		var eyePosY = Math.sin(beta) * distance;
-		var eyePosZ = - Math.sin(alpha) * horizontalDistance;
-		vec3.set(result, eyePosX, eyePosY, eyePosZ);
-		return result;
-	}
+	var thisObject = this;
+	canvas.addEventListener("mousedown", function(evt){thisObject.onMouseDown(evt)});
+}
 
-	function onMouseDown(event)
-	{
-		document.addEventListener("mousemove", onMouseMove);
-		document.addEventListener("mouseup", onMouseUp);
-        preX = event.clientX;
-        preY = event.clientY;
-		baseAlpha = alpha;
-		baseBeta = beta;
-	}
+MouseDrag.prototype.betaLimit =  Math.PI / 180 * 85;
 
-	function onMouseMove(event)
-	{
-		var r = canvas.getBoundingClientRect();
-		var deltaAlpha = -(event.clientX - preX) * Math.PI / 300;
-		var deltaBeta = (event.clientY - preY) * Math.PI / 300;
-		alpha = baseAlpha + deltaAlpha;
-		beta = baseBeta + deltaBeta;
-		if(beta < -betaLimit)
-			beta = -betaLimit;
-		if(beta > betaLimit)
-			beta = betaLimit;
-	}
+MouseDrag.prototype.getViewMatrix = function()
+{
+	var viewMatrix = mat4.create();
+	var eyePos = this.getEyePos();
+	mat4.lookAt(viewMatrix, eyePos, [0, 0, 0], [0, 1, 0]);
+	return viewMatrix;
+};
 
-	function onMouseUp(event)
-	{
-		document.removeEventListener("mousemove", onMouseMove);
-		document.removeEventListener("mouseup", onMouseUp);
-	}
+
+MouseDrag.prototype.getEyePos = function()
+{
+	var result = vec3.create();
+	var horizontalDistance = Math.cos(this.beta) * this.distance;
+	var eyePosX = Math.cos(this.alpha) * horizontalDistance;
+	var eyePosY = Math.sin(this.beta) * this.distance;
+	var eyePosZ = - Math.sin(this.alpha) * horizontalDistance;
+	vec3.set(result, eyePosX, eyePosY, eyePosZ);
+	return result;
+}
+
+MouseDrag.prototype.onMouseDown = function(event)
+{
+	var thisObject = this;
+	this.mousemoveCallback = function(evt){thisObject.onMouseMove(evt)};
+	this.mouseupCallback = function(evt){thisObject.onMouseUp(evt)};
+	document.addEventListener("mousemove", this.mousemoveCallback);
+	document.addEventListener("mouseup", this.mouseupCallback);
+	this.preX = event.clientX;
+	this.preY = event.clientY;
+	this.baseAlpha = this.alpha;
+	this.baseBeta = this.beta;
+}
+
+MouseDrag.prototype.onMouseMove = function(event)
+{
+	var r = this.canvas.getBoundingClientRect();
+	var deltaAlpha = -(event.clientX - this.preX) * Math.PI / 300;
+	var deltaBeta = (event.clientY - this.preY) * Math.PI / 300;
+	this.alpha = this.baseAlpha + deltaAlpha;
+	this.beta = this.baseBeta + deltaBeta;
+	if(this.beta < -this.betaLimit)
+		this.beta = -this.betaLimit;
+	if(this.beta > this.betaLimit)
+		this.beta = this.betaLimit;
+}
+
+MouseDrag.prototype.onMouseUp = function(event)
+{
+	document.removeEventListener("mousemove", this.mousemoveCallback);
+	document.removeEventListener("mouseup", this.mouseupCallback);
 }
