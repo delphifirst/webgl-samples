@@ -3,7 +3,8 @@ var shaderInfos = {};	// store informations of each shader (shader program, unif
 var verticesBuffer;	// vertex buffer of cube
 var indicesBuffer;	// index buffer of cube
 var framebuffer;	// framebuffer used for offscreen rendering of the dynamic cubemap
-var cubeTexture;	// the dynamic cubemap
+var dynamicCubeTexture;	// the dynamic cubemap
+var staticCubeTexture;
 var mouseDrag;		// used to process mouse drag event
 var startTime, lastUpdateTime;
 
@@ -88,14 +89,21 @@ function getShader(id)
 function initShaders()
 {
     var vertexShader = getShader("shader-vs");
-    var cubemapFragmentShader = getShader("cubemap-shader-fs");
+    var dynamicCubemapFragmentShader = getShader("dynamic-cubemap-shader-fs");
+	var staticCubemapFragmentShader = getShader("static-cubemap-shader-fs");
 	var colorFragmentShader = getShader("color-shader-fs");
 
     shaderInfos.cubemap = {}
 	shaderInfos.cubemap.program = gl.createProgram();
     gl.attachShader(shaderInfos.cubemap.program, vertexShader);
-    gl.attachShader(shaderInfos.cubemap.program, cubemapFragmentShader);
+    gl.attachShader(shaderInfos.cubemap.program, dynamicCubemapFragmentShader);
     gl.linkProgram(shaderInfos.cubemap.program);
+
+	shaderInfos.skybox = {}
+	shaderInfos.skybox.program = gl.createProgram();
+    gl.attachShader(shaderInfos.skybox.program, vertexShader);
+    gl.attachShader(shaderInfos.skybox.program, staticCubemapFragmentShader);
+    gl.linkProgram(shaderInfos.skybox.program);
 
 	shaderInfos.color = {}
 	shaderInfos.color.program = gl.createProgram();
@@ -104,7 +112,8 @@ function initShaders()
     gl.linkProgram(shaderInfos.color.program);
 
     if(!gl.getProgramParameter(shaderInfos.cubemap.program, gl.LINK_STATUS)
-			|| !gl.getProgramParameter(shaderInfos.color.program, gl.LINK_STATUS))
+			|| !gl.getProgramParameter(shaderInfos.color.program, gl.LINK_STATUS)
+			|| !gl.getProgramParameter(shaderInfos.skybox.program, gl.LINK_STATUS))
         alert("Unable to initialize the shader program.");
 
     shaderInfos.cubemap.attributes = {};
@@ -112,6 +121,12 @@ function initShaders()
     gl.enableVertexAttribArray(shaderInfos.cubemap.attributes.pos);
 	shaderInfos.cubemap.attributes.normal = gl.getAttribLocation(shaderInfos.cubemap.program, "normal");
     gl.enableVertexAttribArray(shaderInfos.cubemap.attributes.normal);
+
+	shaderInfos.skybox.attributes = {};
+    shaderInfos.skybox.attributes.pos = gl.getAttribLocation(shaderInfos.cubemap.program, "pos");
+    gl.enableVertexAttribArray(shaderInfos.skybox.attributes.pos);
+	shaderInfos.skybox.attributes.normal = gl.getAttribLocation(shaderInfos.skybox.program, "normal");
+    gl.enableVertexAttribArray(shaderInfos.skybox.attributes.normal);
 
 	shaderInfos.color.attributes = {};
     shaderInfos.color.attributes.pos = gl.getAttribLocation(shaderInfos.color.program, "pos");
@@ -123,9 +138,14 @@ function initShaders()
     shaderInfos.cubemap.uniforms.modelMatrix = gl.getUniformLocation(shaderInfos.cubemap.program, "modelMatrix");
     shaderInfos.cubemap.uniforms.viewMatrix = gl.getUniformLocation(shaderInfos.cubemap.program, "viewMatrix");
     shaderInfos.cubemap.uniforms.projectionMatrix = gl.getUniformLocation(shaderInfos.cubemap.program, "projectionMatrix");
-    shaderInfos.cubemap.uniforms.meshColor = gl.getUniformLocation(shaderInfos.cubemap.program, "meshColor");
 	shaderInfos.cubemap.uniforms.sampler = gl.getUniformLocation(shaderInfos.cubemap.program, "sampler");
 	shaderInfos.cubemap.uniforms.eyePos = gl.getUniformLocation(shaderInfos.cubemap.program, "eyePos");
+
+	shaderInfos.skybox.uniforms = {};
+    shaderInfos.skybox.uniforms.modelMatrix = gl.getUniformLocation(shaderInfos.skybox.program, "modelMatrix");
+    shaderInfos.skybox.uniforms.viewMatrix = gl.getUniformLocation(shaderInfos.skybox.program, "viewMatrix");
+    shaderInfos.skybox.uniforms.projectionMatrix = gl.getUniformLocation(shaderInfos.skybox.program, "projectionMatrix");
+	shaderInfos.skybox.uniforms.sampler = gl.getUniformLocation(shaderInfos.skybox.program, "sampler");
 
 	shaderInfos.color.uniforms = {};
     shaderInfos.color.uniforms.modelMatrix = gl.getUniformLocation(shaderInfos.color.program, "modelMatrix");
@@ -152,13 +172,25 @@ function initResources()
 	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
 
 	// allocate space for the dynamic cubemap
-	cubeTexture = gl.createTexture();
-	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
+	dynamicCubeTexture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, dynamicCubeTexture);
 	for(var i = 0; i < 6; ++i)
 	{
 		gl.texImage2D(CUBE_TEXTURES_FACE[i], 0, gl.RGBA,
 			OFFSCREEN_FRAMEBUFFER_SIZE, OFFSCREEN_FRAMEBUFFER_SIZE,
 			0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	}
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+	// load static cubemap
+	staticCubeTexture = gl.createTexture();
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, staticCubeTexture);
+	imageList = ["posx", "negx", "posy", "negy", "posz", "negz"];
+	for(var i = 0; i < 6; ++i)
+	{
+		image = document.getElementById("skybox-" + imageList[i]);
+		gl.texImage2D(CUBE_TEXTURES_FACE[i], 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
 	}
 	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 	gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -183,6 +215,8 @@ function updateFps(deltaTime)
 
 function drawSatelliteCube(t, viewMatrix, projectionMatrix, meshColor, translation)
 {
+	gl.useProgram(shaderInfos.color.program);
+
 	var rotationMatrix = mat4.create();
     mat4.fromXRotation(rotationMatrix, t * 3);
 	var scaleMatrix = mat4.create();
@@ -198,7 +232,6 @@ function drawSatelliteCube(t, viewMatrix, projectionMatrix, meshColor, translati
 	gl.vertexAttribPointer(shaderInfos.color.attributes.normal, 3, gl.FLOAT, false, 24, 12);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
 
-    // Render cube
     gl.uniformMatrix4fv(shaderInfos.color.uniforms.modelMatrix, false, modelMatrix);
     gl.uniformMatrix4fv(shaderInfos.color.uniforms.viewMatrix, false, viewMatrix);
     gl.uniformMatrix4fv(shaderInfos.color.uniforms.projectionMatrix, false, projectionMatrix);
@@ -207,9 +240,15 @@ function drawSatelliteCube(t, viewMatrix, projectionMatrix, meshColor, translati
     gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 }
 
-function drawMainCube(t, viewMatrix, projectionMatrix)
+function drawMainCube(viewMatrix, projectionMatrix)
 {
-	var meshColor = [0.5, 0.5, 0.5];
+	gl.useProgram(shaderInfos.cubemap.program);
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, dynamicCubeTexture);
+	gl.uniform1i(shaderInfos.cubemap.uniforms.sampler, 0);
+
+	var eyePos = mouseDrag.getEyePos();
+	gl.uniform3fv(shaderInfos.cubemap.uniforms.eyePos, eyePos);
 
 	var modelMatrix = mat4.create();
 
@@ -218,11 +257,31 @@ function drawMainCube(t, viewMatrix, projectionMatrix)
 	gl.vertexAttribPointer(shaderInfos.cubemap.attributes.normal, 3, gl.FLOAT, false, 24, 12);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
 
-    // Render cube
     gl.uniformMatrix4fv(shaderInfos.cubemap.uniforms.modelMatrix, false, modelMatrix);
     gl.uniformMatrix4fv(shaderInfos.cubemap.uniforms.viewMatrix, false, viewMatrix);
     gl.uniformMatrix4fv(shaderInfos.cubemap.uniforms.projectionMatrix, false, projectionMatrix);
-    gl.uniform3fv(shaderInfos.cubemap.uniforms.meshColor, meshColor);
+
+    gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+}
+
+function drawSkybox(viewMatrix, projectionMatrix)
+{
+	gl.useProgram(shaderInfos.skybox.program);
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, staticCubeTexture);
+	gl.uniform1i(shaderInfos.skybox.uniforms.sampler, 0);
+
+	var modelMatrix = mat4.create();
+	mat4.fromScaling(modelMatrix, [100, 100, 100]);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
+    gl.vertexAttribPointer(shaderInfos.skybox.attributes.pos, 3, gl.FLOAT, false, 24, 0);
+	gl.vertexAttribPointer(shaderInfos.skybox.attributes.normal, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+
+    gl.uniformMatrix4fv(shaderInfos.skybox.uniforms.modelMatrix, false, modelMatrix);
+    gl.uniformMatrix4fv(shaderInfos.skybox.uniforms.viewMatrix, false, viewMatrix);
+    gl.uniformMatrix4fv(shaderInfos.skybox.uniforms.projectionMatrix, false, projectionMatrix);
 
     gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 }
@@ -239,15 +298,13 @@ function render()
 
     var t = (currentTime - startTime) / 1000;
 
-	gl.useProgram(shaderInfos.color.program);
-
-	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, dynamicCubeTexture);
 
 	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
 	gl.viewport(0, 0, OFFSCREEN_FRAMEBUFFER_SIZE, OFFSCREEN_FRAMEBUFFER_SIZE);
 	for(var i = 0; i < 6; ++i)
 	{
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, CUBE_TEXTURES_FACE[i], cubeTexture, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, CUBE_TEXTURES_FACE[i], dynamicCubeTexture, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		var viewMatrix = mat4.create();
 	    mat4.lookAt(viewMatrix, [0, 0, 0], CUBE_DIRECTIONS[i], CUBE_DIRECTIONS_UP[i]);
@@ -255,33 +312,26 @@ function render()
 		mat4.fromScaling(reflectMatrix, [-1, -1, 1]);
 		mat4.mul(viewMatrix, reflectMatrix, viewMatrix);
 	    var projectionMatrix = mat4.create();
-	    mat4.perspective(projectionMatrix, Math.PI / 2, 1, 0.01, 100);
+	    mat4.perspective(projectionMatrix, Math.PI / 2, 1, 0.01, 200);
 
 		for(var j = 0; j < 6; ++j)
 			drawSatelliteCube(t, viewMatrix, projectionMatrix, SATELLITE_CUBES_COLOR[j], SATELLITE_CUBES_POSITION[j]);
+		drawSkybox(viewMatrix, projectionMatrix);
 	}
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	gl.viewport(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-	gl.useProgram(shaderInfos.cubemap.program);
-	gl.activeTexture(gl.TEXTURE0);
-	gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeTexture);
-	gl.uniform1i(shaderInfos.cubemap.uniforms.sampler, 0);
-
 	var viewMatrix = mouseDrag.getViewMatrix();
-	var eyePos = mouseDrag.getEyePos();
-
-	gl.uniform3fv(shaderInfos.cubemap.uniforms.eyePos, eyePos);
 
     var projectionMatrix = mat4.create();
-    mat4.perspective(projectionMatrix, Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.01, 100);
+    mat4.perspective(projectionMatrix, Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.01, 200);
 
-    drawMainCube(t, viewMatrix, projectionMatrix);
+    drawMainCube(viewMatrix, projectionMatrix);
 
-	gl.useProgram(shaderInfos.color.program);
 	for(var j = 0; j < 6; ++j)
 		drawSatelliteCube(t, viewMatrix, projectionMatrix, SATELLITE_CUBES_COLOR[j], SATELLITE_CUBES_POSITION[j]);
+	drawSkybox(viewMatrix, projectionMatrix);
 }
 
 function start()

@@ -55,8 +55,8 @@ MouseDrag.prototype.onMouseDown = function(event)
 MouseDrag.prototype.onMouseMove = function(event)
 {
 	var r = this.canvas.getBoundingClientRect();
-	var deltaAlpha = -(event.clientX - this.preX) * Math.PI / 300;
-	var deltaBeta = (event.clientY - this.preY) * Math.PI / 300;
+	var deltaAlpha = -(event.clientX - this.preX) * Math.PI / 500;
+	var deltaBeta = (event.clientY - this.preY) * Math.PI / 500;
 	this.alpha = this.baseAlpha + deltaAlpha;
 	this.beta = this.baseBeta + deltaBeta;
 	if(this.beta < -this.betaLimit)

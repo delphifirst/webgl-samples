@@ -40,21 +40,32 @@
 		}
 		</script>
 
-		<script id="cubemap-shader-fs" type="x-shader/x-fragment">
+		<script id="dynamic-cubemap-shader-fs" type="x-shader/x-fragment">
 		precision mediump float;
 		uniform samplerCube sampler;
-		uniform vec3 meshColor;
 		uniform vec3 eyePos;
-		const vec3 lightDirection = vec3(-1, 3, -2);
 
 		varying vec3 fsNormal;
 		varying vec3 fsPos;
 
 		void main()
 		{
-			vec3 diffuse = (clamp(dot(normalize(fsNormal), normalize(lightDirection)), 0.0, 1.0) * 0.8 + 0.2) * meshColor;
 			vec3 envReflection = textureCube(sampler, reflect(normalize(fsPos - eyePos), normalize(fsNormal))).rgb;
-			gl_FragColor = vec4(0.5 * diffuse + 0.5 * envReflection, 1);
+			gl_FragColor = vec4(envReflection, 1);
+		}
+		</script>
+
+		<script id="static-cubemap-shader-fs" type="x-shader/x-fragment">
+		precision mediump float;
+		uniform samplerCube sampler;
+
+		varying vec3 fsNormal;
+		varying vec3 fsPos;
+
+		void main()
+		{
+			vec3 color = textureCube(sampler, fsPos).rgb;
+			gl_FragColor = vec4(color, 1);
 		}
 		</script>
 	</head>
@@ -65,6 +76,13 @@
     	</canvas>
 		<ul>
 			<li id="labelFps">FPS: 0</li>
+			<li>Skybox images (from <a href="http://math.hws.edu/graphicsbook/source/webgl/cube-camera.html">This site</a>)</li>
+			<img id="skybox-posx" width="64" height="64" src="./posx.jpg"/>
+			<img id="skybox-negx" width="64" height="64" src="./negx.jpg"/>
+			<img id="skybox-posy" width="64" height="64" src="./posy.jpg"/>
+			<img id="skybox-negy" width="64" height="64" src="./negy.jpg"/>
+			<img id="skybox-posz" width="64" height="64" src="./posz.jpg"/>
+			<img id="skybox-negz" width="64" height="64" src="./negz.jpg"/>
 		</ul>
     </body>
 </html>
