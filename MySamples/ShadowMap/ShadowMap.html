@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+	<head>
+		<title>ShadowMap</title>
+		<script src="./gl-matrix.js"></script>
+		<script src="./model-data.js"></script>
+		<script src="./mouse-drag.js"></script>
+		<script src="./main.js"></script>
+		<script id="shader-vs" type="x-shader/x-vertex">
+		uniform mat4 modelMatrix;
+		uniform mat4 invTransModelMatrix;
+		uniform mat4 viewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 pos;
+		attribute vec3 normal;
+
+		varying vec3 fsNormal;
+
+		void main()
+		{
+			gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1);
+			fsNormal = (invTransModelMatrix * vec4(normal, 0)).xyz;
+		}
+		</script>
+
+		<script id="color-shader-fs" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform vec3 meshColor;
+		const vec3 lightDirection = vec3(-1, 3, -2);
+
+		varying vec3 fsNormal;
+
+		void main()
+		{
+			vec3 diffuse = (clamp(dot(normalize(fsNormal), normalize(lightDirection)), 0.0, 1.0) * 0.8 + 0.2) * meshColor;
+			gl_FragColor = vec4(diffuse, 1);
+		}
+		</script>
+	</head>
+
+	<body onload="start()">
+	    <canvas id="glcanvas" width="800" height="600">
+			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
+    	</canvas>
+		<ul>
+			<li id="labelFps">FPS: 0</li>
+		</ul>
+    </body>
+</html>
