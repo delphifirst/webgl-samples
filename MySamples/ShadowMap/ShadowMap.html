@@ -47,7 +47,10 @@
 
 		void main()
 		{
-			gl_FragColor = vec4(gl_FragCoord.z, 0, 0, 1);
+			float r = floor(gl_FragCoord.z * 255.0);
+			float g = floor((gl_FragCoord.z * 255.0 - r) * 255.0);
+			float b = floor(((gl_FragCoord.z * 255.0 - r) * 255.0 - g) * 255.0);
+			gl_FragColor = vec4(r / 255.0, g / 255.0, b / 255.0, 1);
 		}
 		</script>
 
@@ -69,7 +72,8 @@
 			float s = hPos.x / hPos.w / 2.0 + 0.5;
 			float t = hPos.y / hPos.w / 2.0 + 0.5;
 			float z = hPos.z / hPos.w / 2.0 + 0.5;
-			float shadow = float(texture2D(sampler, vec2(s, t)).r + 0.003 >= z);
+			vec4 shadowmapRaw = texture2D(sampler, vec2(s, t));
+			float shadow = float(shadowmapRaw.r + shadowmapRaw.g / 255.0 + shadowmapRaw.b / 255.0 / 255.0 + 0.001 >= z);
 			gl_FragColor = vec4(shadow * diffuse, 1.0);
 		}
 		</script>
