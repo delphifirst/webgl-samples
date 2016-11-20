@@ -205,12 +205,13 @@ function drawCube(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProject
     gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
 }
 
-function drawScene(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection)
+function drawScene(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection, t)
 {
 	gl.useProgram(shaderInfo.program);
 
 	drawCube(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, [1, 0, 0], [0, 0, 0], [1, 1, 1], lightDirection);
 	drawCube(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, [0, 1, 0], [0, 1.25, 0], [0.25, 0.25, 0.25], lightDirection);
+    drawCube(shaderInfo, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, [0, 1, 1], [Math.sin(t), 2, -1.1], [0.4, 0.4, 0.4], lightDirection);
 }
 
 function render()
@@ -239,7 +240,7 @@ function render()
 	gl.bindFramebuffer(gl.FRAMEBUFFER, shadowMapFramebuffer);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	gl.viewport(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
-	drawScene(shaderInfos.shadowMap, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection);
+	drawScene(shaderInfos.shadowMap, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection, t);
 
 	viewMatrix = mouseDrag.getViewMatrix();
 	projectionMatrix = mat4.create();
@@ -248,7 +249,7 @@ function render()
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	gl.viewport(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-	drawScene(shaderInfos.color, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection);
+	drawScene(shaderInfos.color, viewMatrix, projectionMatrix, shadowmapViewProjectionMatrix, lightDirection, t);
 }
 
 function start()
