@@ -1,5 +1,5 @@
 var ModelCube = {
-	// color and normal
+	// position and normal
 	vertices: [
 		-1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
 		1.0, 1.0, 1.0,		0.0, 1.0, 0.0,
