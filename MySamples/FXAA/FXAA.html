@@ -27,7 +27,6 @@
 			fsNormal = (invTransModelMatrix * vec4(normal, 0)).xyz;
 		}
 		</script>
-
 		<script id="color-shader-fs" type="x-shader/x-fragment">
 		precision mediump float;
 
@@ -43,14 +42,38 @@
 			gl_FragColor = vec4(diffuse, 1.0);
 		}
 		</script>
+
+		<script id="screen-shader-vs" type="x-shader/x-vertex">
+		attribute vec3 pos;
+		attribute vec2 uv;
+
+		varying vec2 fsUv;
+
+		void main()
+		{
+			gl_Position = vec4(pos, 1);
+			fsUv = uv;
+		}
+		</script>
+		<script id="screen-shader-fs" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform sampler2D sampler;
+
+		varying vec2 fsUv;
+
+		void main()
+		{
+			gl_FragColor = texture2D(sampler, fsUv);
+		}
+		</script>
 	</head>
 
 	<body onload="start()">
-	    <canvas id="glcanvas" width="800" height="600">
+		<span id="label-fps">FPS: 0</span>
+		<input type="checkbox" id="checkbox-scale" onclick="toggleScale()"/> 5X Scale <br/>
+	    <canvas id="glcanvas" width="512" height="512">
 			Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
     	</canvas>
-		<ul>
-			<li id="labelFps">FPS: 0</li>
-		</ul>
     </body>
 </html>
