@@ -68,7 +68,19 @@
 		}
 		</script>
 
-		<script id="fxaa-shader-fs" type="x-shader/x-fragment">
+		<script id="fxaa-shader-fs-0" type="x-shader/x-fragment">
+		precision mediump float;
+
+		uniform sampler2D sampler;
+
+		varying vec2 fsUv;
+
+		void main()
+		{
+			gl_FragColor = texture2D(sampler, fsUv);
+		}
+		</script>
+		<script id="fxaa-shader-fs-1" type="x-shader/x-fragment">
 		precision mediump float;
 
 		uniform sampler2D sampler;

@@ -1,18 +1,13 @@
 var gl;
 var shaderInfos = {};	// store informations of each shader (shader program, uniforms, attributes...)
-var vertexBuffers = {};
-var indexBuffers = {};
-var smallFramebuffer, normalFramebuffer, currentFramebuffer;
-var smallColorbuffer, normalColorbuffer, currentColorbuffer;
-var fxaaSmallFramebuffer, fxaaNormalFramebuffer, fxaaCurrentFramebuffer;
-var fxaaSmallColorbuffer, fxaaNormalColorbuffer, fxaaCurrentColorbuffer;
+var models = {};
+var renderTargets = {};
+var currentSceneRenderTarget, currentFxaaRenderTarget;
 var mouseDrag;		// used to process mouse drag event
 var startTime, lastUpdateTime;
 
 var isScaleUp = false;
 var mode = 0;
-
-var internalViewportWidth, internalViewportHeight;
 
 var CANVAS_WIDTH, CANVAS_HEIGHT;
 var SCALE = 8;
@@ -109,71 +104,61 @@ function initShaders()
         ["modelMatrix", "invTransModelMatrix", "viewMatrix", "projectionMatrix", "meshColor", "lightDirection"]);
     shaderInfos.screen = getShaderInfo("screen-shader-vs", "screen-shader-fs",
         ["pos", "uv"], ["sampler"]);
-    shaderInfos.fxaa = getShaderInfo("screen-shader-vs", "fxaa-shader-fs",
+    shaderInfos.fxaa0 = getShaderInfo("screen-shader-vs", "fxaa-shader-fs-0",
         ["pos", "uv"], ["sampler"]);
+	shaderInfos.fxaa1 = getShaderInfo("screen-shader-vs", "fxaa-shader-fs-1",
+        ["pos", "uv"], ["sampler"]);
+}
+
+function getModel(modelData)
+{
+	var vertexBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData.vertices), gl.STATIC_DRAW);
+	var indexBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(modelData.indices), gl.STATIC_DRAW);
+	var model = {};
+	model.vertexBuffer = vertexBuffer;
+	model.indexBuffer = indexBuffer;
+	return model;
+}
+
+function getRenderTarget(width, height, withDepth, filter)
+{
+    var colorbuffer = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, colorbuffer);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+	framebuffer = gl.createFramebuffer();
+	gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorbuffer, 0);
+	if(withDepth)
+	{
+		var renderbuffer = gl.createRenderbuffer();
+	    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+		gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+	}
+
+	var renderTarget = {};
+	renderTarget.framebuffer = framebuffer;
+	renderTarget.colorbuffer = colorbuffer;
+	renderTarget.width = width;
+	renderTarget.height = height;
+	return renderTarget;
 }
 
 function initResources()
 {
-    vertexBuffers.cube = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.cube);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ModelCube.vertices), gl.STATIC_DRAW);
+	models.cube = getModel(ModelCube);
+	models.quad = getModel(ModelQuad);
 
-    indexBuffers.cube = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.cube);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ModelCube.indices), gl.STATIC_DRAW);
-
-    vertexBuffers.quad = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.quad);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ModelQuad.vertices), gl.STATIC_DRAW);
-
-    indexBuffers.quad = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.quad);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(ModelQuad.indices), gl.STATIC_DRAW);
-
-    var renderbuffer = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
-	gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE);
-    smallColorbuffer = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, smallColorbuffer);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	smallFramebuffer = gl.createFramebuffer();
-	gl.bindFramebuffer(gl.FRAMEBUFFER, smallFramebuffer);
-	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, smallColorbuffer, 0);
-
-    renderbuffer = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
-	gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, CANVAS_WIDTH, CANVAS_HEIGHT);
-    normalColorbuffer = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, normalColorbuffer);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH, CANVAS_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	normalFramebuffer = gl.createFramebuffer();
-	gl.bindFramebuffer(gl.FRAMEBUFFER, normalFramebuffer);
-	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, normalColorbuffer, 0);
-
-    fxaaSmallColorbuffer = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, fxaaSmallColorbuffer);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	fxaaSmallFramebuffer = gl.createFramebuffer();
-	gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaSmallFramebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fxaaSmallColorbuffer, 0);
-
-    fxaaNormalColorbuffer = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, fxaaNormalColorbuffer);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH, CANVAS_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-	fxaaNormalFramebuffer = gl.createFramebuffer();
-	gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaNormalFramebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fxaaNormalColorbuffer, 0);
+	renderTargets.smallScene = getRenderTarget(CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, true, gl.LINEAR);
+	renderTargets.normalScene = getRenderTarget(CANVAS_WIDTH, CANVAS_HEIGHT, true, gl.LINEAR);
+	renderTargets.smallFxaa = getRenderTarget(CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, false, gl.NEAREST);
+	renderTargets.normalFxaa = getRenderTarget(CANVAS_WIDTH, CANVAS_HEIGHT, false, gl.NEAREST);
 }
 
 function initProgram()
@@ -216,11 +201,11 @@ function drawCube(shaderInfo, viewMatrix, projectionMatrix, meshColor, translati
 	mat4.invert(invTransModelMatrix, modelMatrix);
 	mat4.transpose(invTransModelMatrix, invTransModelMatrix);
 
-	gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.cube);
+	gl.bindBuffer(gl.ARRAY_BUFFER, models.cube.vertexBuffer);
     gl.vertexAttribPointer(shaderInfo.attributes.pos, 3, gl.FLOAT, false, 24, 0);
 	gl.vertexAttribPointer(shaderInfo.attributes.normal, 3, gl.FLOAT, false, 24, 12);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.cube);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, models.cube.indexBuffer);
 
 	uniforms = shaderInfo.uniforms;
     gl.uniformMatrix4fv(uniforms.modelMatrix, false, modelMatrix);
@@ -241,8 +226,8 @@ function drawScene(shaderInfo)
 	var projectionMatrix = mat4.create();
     mat4.perspective(projectionMatrix, Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.01, 200);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, currentFramebuffer);
-    gl.viewport(0, 0, internalViewportWidth, internalViewportHeight);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, currentSceneRenderTarget.framebuffer);
+    gl.viewport(0, 0, currentSceneRenderTarget.width, currentSceneRenderTarget.height);
 
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
@@ -252,19 +237,19 @@ function drawScene(shaderInfo)
 
 function fxaa(shaderInfo)
 {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaCurrentFramebuffer);
-    gl.viewport(0, 0, internalViewportWidth, internalViewportHeight);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, currentFxaaRenderTarget.framebuffer);
+    gl.viewport(0, 0, currentFxaaRenderTarget.width, currentFxaaRenderTarget.height);
     gl.disable(gl.DEPTH_TEST);
     gl.useProgram(shaderInfo.program);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.quad);
+    gl.bindBuffer(gl.ARRAY_BUFFER, models.quad.vertexBuffer);
     gl.vertexAttribPointer(shaderInfo.attributes.pos, 3, gl.FLOAT, false, 20, 0);
     gl.vertexAttribPointer(shaderInfo.attributes.uv, 2, gl.FLOAT, false, 20, 12);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.quad);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, models.quad.indexBuffer);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, currentColorbuffer);
+    gl.bindTexture(gl.TEXTURE_2D, currentSceneRenderTarget.colorbuffer);
 
     uniforms = shaderInfo.uniforms;
     gl.uniform1i(uniforms.sampler, 0);
@@ -279,14 +264,14 @@ function textureToScreen(shaderInfo)
     gl.disable(gl.DEPTH_TEST);
     gl.useProgram(shaderInfo.program);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.quad);
+    gl.bindBuffer(gl.ARRAY_BUFFER, models.quad.vertexBuffer);
     gl.vertexAttribPointer(shaderInfo.attributes.pos, 3, gl.FLOAT, false, 20, 0);
 	gl.vertexAttribPointer(shaderInfo.attributes.uv, 2, gl.FLOAT, false, 20, 12);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.quad);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, models.quad.indexBuffer);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, fxaaCurrentColorbuffer);
+    gl.bindTexture(gl.TEXTURE_2D, currentFxaaRenderTarget.colorbuffer);
 
 	uniforms = shaderInfo.uniforms;
 	gl.uniform1i(uniforms.sampler, 0);
@@ -306,26 +291,21 @@ function render()
 
     if(isScaleUp)
     {
-        currentFramebuffer = smallFramebuffer;
-        currentColorbuffer = smallColorbuffer;
-        fxaaCurrentFramebuffer = fxaaSmallFramebuffer;
-        fxaaCurrentColorbuffer = fxaaSmallColorbuffer;
-        internalViewportWidth = CANVAS_WIDTH / SCALE;
-        internalViewportHeight = CANVAS_HEIGHT / SCALE;
+		currentSceneRenderTarget = renderTargets.smallScene;
+		currentFxaaRenderTarget = renderTargets.smallFxaa;
     }
     else
     {
-        currentFramebuffer = normalFramebuffer;
-        currentColorbuffer = normalColorbuffer;
-        fxaaCurrentFramebuffer = fxaaNormalFramebuffer;
-        fxaaCurrentColorbuffer = fxaaNormalColorbuffer;
-        internalViewportWidth = CANVAS_WIDTH;
-        internalViewportHeight = CANVAS_HEIGHT;
+		currentSceneRenderTarget = renderTargets.normalScene;
+		currentFxaaRenderTarget = renderTargets.normalFxaa;
     }
 
 	drawScene(shaderInfos.color);
 
-    fxaa(shaderInfos.fxaa);
+	if(mode == 0)
+    	fxaa(shaderInfos.fxaa0);
+	else if(mode == 1)
+		fxaa(shaderInfos.fxaa1);
 
     textureToScreen(shaderInfos.screen);
 }
