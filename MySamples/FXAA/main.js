@@ -2,12 +2,17 @@ var gl;
 var shaderInfos = {};	// store informations of each shader (shader program, uniforms, attributes...)
 var vertexBuffers = {};
 var indexBuffers = {};
-var smallFramebuffer, normalFramebuffer;
-var smallColorbuffer, normalColorbuffer;
+var smallFramebuffer, normalFramebuffer, currentFramebuffer;
+var smallColorbuffer, normalColorbuffer, currentColorbuffer;
+var fxaaSmallFramebuffer, fxaaNormalFramebuffer, fxaaCurrentFramebuffer;
+var fxaaSmallColorbuffer, fxaaNormalColorbuffer, fxaaCurrentColorbuffer;
 var mouseDrag;		// used to process mouse drag event
 var startTime, lastUpdateTime;
 
 var isScaleUp = false;
+var mode = 0;
+
+var internalViewportWidth, internalViewportHeight;
 
 var CANVAS_WIDTH, CANVAS_HEIGHT;
 var SCALE = 8;
@@ -27,13 +32,6 @@ function initWebGL()
         alert("Your browser doesn't appear to support WebGL.");
         gl = null;
     }
-}
-
-function initConsts()
-{
-	var canvas = document.getElementById("glcanvas");
-	CANVAS_WIDTH = canvas.width;
-	CANVAS_HEIGHT = canvas.height;
 }
 
 function getShader(id)
@@ -68,59 +66,51 @@ function getShader(id)
     return shader;
 }
 
+function getShaderInfo(vertexShaderId, fragmentShaderId, attributeList, uniformList)
+{
+    var vertexShader = getShader(vertexShaderId);
+    var fragmentShader = getShader(fragmentShaderId);
+    var program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    if(!gl.getProgramParameter(program, gl.LINK_STATUS))
+    {
+        alert("Unable to initialize the shader program.");
+        return null;
+    }
+
+    var attributes = {};
+    for(var i = 0; i < attributeList.length; ++i)
+    {
+        attributeName = attributeList[i];
+        attributes[attributeName] = gl.getAttribLocation(program, attributeName);
+        gl.enableVertexAttribArray(attributes[attributeName]);
+    }
+
+    var uniforms = {};
+    for(var i = 0; i < uniformList.length; ++i)
+    {
+        uniformName = uniformList[i];
+        uniforms[uniformName] = gl.getUniformLocation(program, uniformName);
+    }
+
+    var shaderInfo = {};
+    shaderInfo.program = program;
+    shaderInfo.attributes = attributes;
+    shaderInfo.uniforms = uniforms;
+    return shaderInfo;
+}
+
 function initShaders()
 {
-    var colorVertexShader = getShader("color-shader-vs");
-	var colorFragmentShader = getShader("color-shader-fs");
-    var screenVertexShader = getShader("screen-shader-vs");
-    var screenFragmentShader = getShader("screen-shader-fs");
-
-	var program;
-
-	shaderInfos.color = {}
-	shaderInfos.color.program = program = gl.createProgram();
-    gl.attachShader(program, colorVertexShader);
-    gl.attachShader(program, colorFragmentShader);
-    gl.linkProgram(program);
-
-    shaderInfos.screen = {}
-    shaderInfos.screen.program = program = gl.createProgram();
-    gl.attachShader(program, screenVertexShader);
-    gl.attachShader(program, screenFragmentShader);
-    gl.linkProgram(program);
-
-    if(!gl.getProgramParameter(shaderInfos.color.program, gl.LINK_STATUS)
-            || !gl.getProgramParameter(shaderInfos.screen.program, gl.LINK_STATUS))
-        alert("Unable to initialize the shader program.");
-
-	var attributes;
-	program = shaderInfos.color.program;
-	shaderInfos.color.attributes = attributes = {};
-    attributes.pos = gl.getAttribLocation(program, "pos");
-    gl.enableVertexAttribArray(attributes.pos);
-	attributes.normal = gl.getAttribLocation(program, "normal");
-    gl.enableVertexAttribArray(attributes.normal);
-
-    program = shaderInfos.screen.program;
-    shaderInfos.screen.attributes = attributes = {};
-    attributes.pos = gl.getAttribLocation(program, "pos");
-    gl.enableVertexAttribArray(attributes.pos);
-    attributes.uv = gl.getAttribLocation(program, "uv");
-    gl.enableVertexAttribArray(attributes.uv);
-
-	var uniforms;
-	program = shaderInfos.color.program;
-	shaderInfos.color.uniforms = uniforms = {};
-    uniforms.modelMatrix = gl.getUniformLocation(program, "modelMatrix");
-	uniforms.invTransModelMatrix = gl.getUniformLocation(program, "invTransModelMatrix");
-    uniforms.viewMatrix = gl.getUniformLocation(program, "viewMatrix");
-    uniforms.projectionMatrix = gl.getUniformLocation(program, "projectionMatrix");
-    uniforms.meshColor = gl.getUniformLocation(program, "meshColor");
-	uniforms.lightDirection = gl.getUniformLocation(program, "lightDirection");
-
-    program = shaderInfos.screen.program;
-    shaderInfos.screen.uniforms = uniforms = {};
-    uniforms.sampler = gl.getUniformLocation(program, "sampler");
+	shaderInfos.color = getShaderInfo("color-shader-vs", "color-shader-fs",
+        ["pos", "normal"],
+        ["modelMatrix", "invTransModelMatrix", "viewMatrix", "projectionMatrix", "meshColor", "lightDirection"]);
+    shaderInfos.screen = getShaderInfo("screen-shader-vs", "screen-shader-fs",
+        ["pos", "uv"], ["sampler"]);
+    shaderInfos.fxaa = getShaderInfo("screen-shader-vs", "fxaa-shader-fs",
+        ["pos", "uv"], ["sampler"]);
 }
 
 function initResources()
@@ -147,8 +137,8 @@ function initResources()
     smallColorbuffer = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, smallColorbuffer);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 	smallFramebuffer = gl.createFramebuffer();
 	gl.bindFramebuffer(gl.FRAMEBUFFER, smallFramebuffer);
 	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
@@ -160,28 +150,51 @@ function initResources()
     normalColorbuffer = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, normalColorbuffer);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH, CANVAS_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 	normalFramebuffer = gl.createFramebuffer();
 	gl.bindFramebuffer(gl.FRAMEBUFFER, normalFramebuffer);
 	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, normalColorbuffer, 0);
+
+    fxaaSmallColorbuffer = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, fxaaSmallColorbuffer);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	fxaaSmallFramebuffer = gl.createFramebuffer();
+	gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaSmallFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fxaaSmallColorbuffer, 0);
+
+    fxaaNormalColorbuffer = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, fxaaNormalColorbuffer);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, CANVAS_WIDTH, CANVAS_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	fxaaNormalFramebuffer = gl.createFramebuffer();
+	gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaNormalFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fxaaNormalColorbuffer, 0);
 }
 
 function initProgram()
 {
     gl.clearColor(0.0, 0.3, 0.5, 1.000000000);
     gl.clearDepth(1.0);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.depthFunc(gl.LEQUAL);
     startTime = lastUpdateTime = (new Date).getTime();
 	mouseDrag = new MouseDrag(document.getElementById("glcanvas"), 6);
     document.getElementById("checkbox-scale").checked = isScaleUp;
+    document.getElementById("select-mode").selectedIndex = mode;
 }
 
 function toggleScale()
 {
     isScaleUp = document.getElementById("checkbox-scale").checked;
+}
+
+function changeMode()
+{
+    mode = document.getElementById("select-mode").selectedIndex;
 }
 
 function updateFps(deltaTime)
@@ -228,21 +241,35 @@ function drawScene(shaderInfo)
 	var projectionMatrix = mat4.create();
     mat4.perspective(projectionMatrix, Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.01, 200);
 
-    if(isScaleUp)
-    {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, smallFramebuffer);
-        gl.viewport(0, 0, CANVAS_WIDTH / SCALE, CANVAS_HEIGHT / SCALE);
-    }
-    else
-    {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, normalFramebuffer);
-        gl.viewport(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, currentFramebuffer);
+    gl.viewport(0, 0, internalViewportWidth, internalViewportHeight);
 
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
 	gl.useProgram(shaderInfo.program);
 	drawCube(shaderInfo, viewMatrix, projectionMatrix, [1, 0, 0], [0, 0, 0], [1, 1, 1], lightDirection);
+}
+
+function fxaa(shaderInfo)
+{
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fxaaCurrentFramebuffer);
+    gl.viewport(0, 0, internalViewportWidth, internalViewportHeight);
+    gl.disable(gl.DEPTH_TEST);
+    gl.useProgram(shaderInfo.program);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers.quad);
+    gl.vertexAttribPointer(shaderInfo.attributes.pos, 3, gl.FLOAT, false, 20, 0);
+    gl.vertexAttribPointer(shaderInfo.attributes.uv, 2, gl.FLOAT, false, 20, 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.quad);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, currentColorbuffer);
+
+    uniforms = shaderInfo.uniforms;
+    gl.uniform1i(uniforms.sampler, 0);
+
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 }
 
 function textureToScreen(shaderInfo)
@@ -259,10 +286,7 @@ function textureToScreen(shaderInfo)
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffers.quad);
 
     gl.activeTexture(gl.TEXTURE0);
-    if(isScaleUp)
-        gl.bindTexture(gl.TEXTURE_2D, smallColorbuffer);
-    else
-        gl.bindTexture(gl.TEXTURE_2D, normalColorbuffer);
+    gl.bindTexture(gl.TEXTURE_2D, fxaaCurrentColorbuffer);
 
 	uniforms = shaderInfo.uniforms;
 	gl.uniform1i(uniforms.sampler, 0);
@@ -280,9 +304,37 @@ function render()
 
     updateFps(deltaTime);
 
+    if(isScaleUp)
+    {
+        currentFramebuffer = smallFramebuffer;
+        currentColorbuffer = smallColorbuffer;
+        fxaaCurrentFramebuffer = fxaaSmallFramebuffer;
+        fxaaCurrentColorbuffer = fxaaSmallColorbuffer;
+        internalViewportWidth = CANVAS_WIDTH / SCALE;
+        internalViewportHeight = CANVAS_HEIGHT / SCALE;
+    }
+    else
+    {
+        currentFramebuffer = normalFramebuffer;
+        currentColorbuffer = normalColorbuffer;
+        fxaaCurrentFramebuffer = fxaaNormalFramebuffer;
+        fxaaCurrentColorbuffer = fxaaNormalColorbuffer;
+        internalViewportWidth = CANVAS_WIDTH;
+        internalViewportHeight = CANVAS_HEIGHT;
+    }
+
 	drawScene(shaderInfos.color);
 
+    fxaa(shaderInfos.fxaa);
+
     textureToScreen(shaderInfos.screen);
+}
+
+function initConsts()
+{
+	var canvas = document.getElementById("glcanvas");
+	CANVAS_WIDTH = canvas.width;
+	CANVAS_HEIGHT = canvas.height;
 }
 
 function start()
