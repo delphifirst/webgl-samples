@@ -104,10 +104,8 @@ function initShaders()
         ["modelMatrix", "invTransModelMatrix", "viewMatrix", "projectionMatrix", "meshColor", "lightDirection"]);
     shaderInfos.screen = getShaderInfo("screen-shader-vs", "screen-shader-fs",
         ["pos", "uv"], ["sampler"]);
-    shaderInfos.fxaa0 = getShaderInfo("screen-shader-vs", "fxaa-shader-fs-0",
-        ["pos", "uv"], ["sampler"]);
-	shaderInfos.fxaa1 = getShaderInfo("screen-shader-vs", "fxaa-shader-fs-1",
-        ["pos", "uv"], ["sampler"]);
+	shaderInfos.fxaa = getShaderInfo("screen-shader-vs", "fxaa-shader-fs",
+        ["pos", "uv"], ["sampler", "mode", "rcpFrame"]);
 }
 
 function getModel(modelData)
@@ -163,7 +161,7 @@ function initResources()
 
 function initProgram()
 {
-    gl.clearColor(0.0, 0.3, 0.5, 1.000000000);
+    gl.clearColor(0.0, 0.0, 0.0, 1.000000000);
     gl.clearDepth(1.0);
     gl.depthFunc(gl.LEQUAL);
     startTime = lastUpdateTime = (new Date).getTime();
@@ -220,7 +218,7 @@ function drawCube(shaderInfo, viewMatrix, projectionMatrix, meshColor, translati
 
 function drawScene(shaderInfo)
 {
-    var lightDirection = [-1, 3, -2];
+    var lightDirection = [-1, 3, 2];
 
 	var viewMatrix = mouseDrag.getViewMatrix();
 	var projectionMatrix = mat4.create();
@@ -232,7 +230,7 @@ function drawScene(shaderInfo)
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
 	gl.useProgram(shaderInfo.program);
-	drawCube(shaderInfo, viewMatrix, projectionMatrix, [1, 0, 0], [0, 0, 0], [1, 1, 1], lightDirection);
+	drawCube(shaderInfo, viewMatrix, projectionMatrix, [1, 1, 1], [0, 0, 0], [1, 1, 1], lightDirection);
 }
 
 function fxaa(shaderInfo)
@@ -253,6 +251,8 @@ function fxaa(shaderInfo)
 
     uniforms = shaderInfo.uniforms;
     gl.uniform1i(uniforms.sampler, 0);
+	gl.uniform1i(uniforms.mode, mode);
+	gl.uniform2f(uniforms.rcpFrame, 1.0 / currentSceneRenderTarget.width, 1.0 / currentSceneRenderTarget.height);
 
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 }
@@ -302,10 +302,7 @@ function render()
 
 	drawScene(shaderInfos.color);
 
-	if(mode == 0)
-    	fxaa(shaderInfos.fxaa0);
-	else if(mode == 1)
-		fxaa(shaderInfos.fxaa1);
+	fxaa(shaderInfos.fxaa);
 
     textureToScreen(shaderInfos.screen);
 }
