@@ -10,7 +10,7 @@ var isScaleUp = false;
 var mode = 0;
 
 var CANVAS_WIDTH, CANVAS_HEIGHT;
-var SCALE = 8;
+var SCALE = 4;
 
 function initWebGL()
 {

@@ -221,6 +221,14 @@
 			float dstN = horzSpan ? fsUv.x - posN.x : fsUv.y - posN.y;
 			float dstP = horzSpan ? posP.x - fsUv.x : posP.y - fsUv.y;
 			bool directionN = dstN < dstP;
+			if(mode == 4)
+			{
+				if(directionN)
+					gl_FragColor = vec4(1, 0, 0, 1);
+				else
+					gl_FragColor = vec4(0, 0, 1, 1);
+				return;
+			}
 			lumaEndN = directionN ? lumaEndN : lumaEndP;
 			if((lumaM < lumaN) == (lumaEndN < lumaN))
 			{
@@ -238,12 +246,13 @@
 
 	<body onload="start()">
 		<span id="label-fps">FPS: 0</span>
-		<input type="checkbox" id="checkbox-scale" onclick="toggleScale()"/> 5X Scale
+		<input type="checkbox" id="checkbox-scale" onclick="toggleScale()"/> 4X Scale
 		<select id="select-mode" onchange="changeMode()">
 			<option>No FXAA</option>
 			<option>Edge Detection</option>
 			<option>Edge Orientation</option>
 			<option>Edge Neighbor</option>
+			<option>Edge Neg/Pos</option>
 			<option>FXAA</option>
 		</select>
 		<br/>
