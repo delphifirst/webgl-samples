@@ -77,6 +77,7 @@
 		const float FXAA_SUBPIX_CAP = 3.0 / 4.0;
 		const float FXAA_SUBPIX_TRIM_SCALE = 1.0 / (1.0 - FXAA_SUBPIX_TRIM);
 		const int FXAA_SEARCH_STEPS = 16;
+		const float FXAA_SEARCH_THRESHOLD = 1.0 / 4.0;
 
 		uniform sampler2D sampler;
 		uniform int mode;
@@ -162,15 +163,16 @@
 			}
 
 			// Turn vertical case into horizontal case
-			float pixelLength = rcpFrame.x;
+			float lengthSign = horzSpan ? rcpFrame.y : -rcpFrame.x;
 			if(!horzSpan)
 			{
-				lumaS = lumaW;
-				lumaN = lumaE;
-				pixelLength = rcpFrame.y;
+				lumaN = lumaW;
+				lumaS = lumaE;
 			}
 			float gradientN = abs(lumaN - lumaM);
 			float gradientS = abs(lumaM - lumaS);
+			lumaN = (lumaN + lumaM) / 2.0;
+			lumaS = (lumaS + lumaM) / 2.0;
 			bool pairN = gradientN > gradientS;
 			if(mode == 3)
 			{
@@ -186,14 +188,50 @@
 			{
 				lumaN = lumaS;
 				gradientN = gradientS;
+				lengthSign *= -1.0;
 			}
+			vec2 posN;
+			posN.x = fsUv.x + (horzSpan ? 0.0 : lengthSign * 0.5);
+			posN.y = fsUv.y + (horzSpan ? lengthSign * 0.5 : 0.0);
 
-			bool doneN = false, doneP = false;
+			gradientN *= FXAA_SEARCH_THRESHOLD;
+
+			vec2 posP = posN;
+			vec2 offNP = horzSpan ? vec2(rcpFrame.x, 0) : vec2(0, rcpFrame.y);
 			float lumaEndN = lumaN, lumaEndP = lumaN;
+			bool doneN = false, doneP = false;
+			posN -= offNP;
+			posP += offNP;
 			for(int i = 0; i < FXAA_SEARCH_STEPS; ++i)
 			{
-
+				if(!doneN)
+					lumaEndN = fxaaLuma(texture2D(sampler, posN).rgb);
+				if(!doneP)
+					lumaEndP = fxaaLuma(texture2D(sampler, posP).rgb);
+				doneN = doneN || (abs(lumaEndN - lumaN) >= gradientN);
+				doneP = doneP || (abs(lumaEndP - lumaN) >= gradientN);
+				if(doneN && doneP)
+					break;
+				if(!doneN)
+					posN -= offNP;
+				if(!doneP)
+					posP += offNP;
 			}
+
+			float dstN = horzSpan ? fsUv.x - posN.x : fsUv.y - posN.y;
+			float dstP = horzSpan ? posP.x - fsUv.x : posP.y - fsUv.y;
+			bool directionN = dstN < dstP;
+			lumaEndN = directionN ? lumaEndN : lumaEndP;
+			if((lumaM < lumaN) == (lumaEndN < lumaN))
+			{
+				lengthSign = 0.0;
+			}
+			float spanLength = dstP + dstN;
+			dstN = directionN ? dstN : dstP;
+			float subPixelOffset = (0.5 + (dstN * (-1.0 / spanLength))) * lengthSign;
+
+			vec3 rgbF = texture2D(sampler, vec2(fsUv.x + (horzSpan ? 0.0 : subPixelOffset), fsUv.y + (horzSpan ? subPixelOffset : 0.0))).rgb;
+			gl_FragColor = vec4(mix(rgbF, rgbL, blendL), 1);
 		}
 		</script>
 	</head>
