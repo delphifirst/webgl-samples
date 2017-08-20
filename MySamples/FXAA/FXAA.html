@@ -103,6 +103,8 @@
 				return;
 			}
 
+			// Step 1: Detect edge
+
 			vec3 rgbN = fxaaTextureOffset(sampler, fsUv, vec2(0, 1));
 			vec3 rgbW = fxaaTextureOffset(sampler, fsUv, vec2(-1, 0));
 			vec3 rgbM = fxaaTextureOffset(sampler, fsUv, vec2(0, 0));
@@ -140,6 +142,7 @@
 			rgbL /= 9.0;
 
 
+			// Step 2: Classify pixel as horizontal or vertical
 			float lumaNW = fxaaLuma(rgbNW);
 			float lumaNE = fxaaLuma(rgbNE);
 			float lumaSW = fxaaLuma(rgbSW);
@@ -162,6 +165,7 @@
 				return;
 			}
 
+			// Step 3: Determine highest contrast pixel pair
 			// Turn vertical case into horizontal case
 			float lengthSign = horzSpan ? rcpFrame.y : -rcpFrame.x;
 			if(!horzSpan)
@@ -183,6 +187,7 @@
 				return;
 			}
 
+			// Step 4: Search for end-of-edge in both the negative and positive directions along the edge
 			// Turn both cases {pairN, !pairN} into one case
 			if(!pairN)
 			{
@@ -229,6 +234,8 @@
 					gl_FragColor = vec4(0, 0, 1, 1);
 				return;
 			}
+
+			// Step 5: interpolate pixel to reduce aliasing
 			lumaEndN = directionN ? lumaEndN : lumaEndP;
 			if((lumaM < lumaN) == (lumaEndN < lumaN))
 			{
